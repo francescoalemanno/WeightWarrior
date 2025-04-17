@@ -43,10 +43,9 @@ func main() {
 		if len(vec) == 2 && vec[0] == "gw" {
 			gw, err := strconv.ParseFloat(vec[1], 64)
 			if err == nil && gw >= 0 {
-				fmt.Println("Setting goal weight to", gw, "kg")
 				goal_weight = gw
 			} else {
-				fmt.Println("Failed to set goal weight.")
+				fmt.Println("Failed to set goal weight to ", vec[1], ", unparsable number.")
 			}
 		}
 		if len(vec) == 3 {
@@ -89,13 +88,16 @@ func main() {
 		for i := range times {
 			fmt.Println(dates[i], math.Round(weights[i]*10)/10, math.Round(cals[i]), "- TDEE =", math.Round(tdee[i]), "- Trend weight:", math.Round(w[i]*100)/100, "- change per week:", math.Round(dwdt[i]*7*100)/100, "")
 		}
-		if !math.IsNaN(goal_weight) {
-			ltdee := tdee[len(tdee)-1]
-			lw := w[len(w)-1]
-			delta := min(max((goal_weight-lw)*7700, -ltdee*0.2), ltdee*0.2)
-			suggested_cals := ltdee + delta
-			fmt.Println(suggested_cals)
-		}
+		PrintGoalWeight(goal_weight, w[len(w)-1], tdee[len(tdee)-1])
+	}
+}
+
+func PrintGoalWeight(goal_weight float64, lw float64, ltdee float64) {
+	if !math.IsNaN(goal_weight) {
+		delta := min(max(min(max(goal_weight-lw, -lw*0.0005), lw*0.0005)*7700.0, -ltdee*0.25), ltdee*0.25)
+		suggested_cals := ltdee + delta
+		fmt.Println("To reach goal weight of", goal_weight, "kg, suggested calories:", math.Round(suggested_cals), "cal")
+		fmt.Println("At this rate, you should expect a weekly change of", math.Round((suggested_cals-ltdee)/7700.0*100*7)/100, "kg")
 	}
 }
 
