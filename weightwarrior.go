@@ -37,33 +37,42 @@ func main() {
 	times := []float64{}
 	cals := []float64{}
 	weights := []float64{}
+	goal_weight := math.NaN()
 	for j := range rows {
 		vec := strings.Fields(rows[j])
-		if len(vec) != 3 {
-			continue
+		if len(vec) == 2 && vec[0] == "gw" {
+			gw, err := strconv.ParseFloat(vec[1], 64)
+			if err == nil && gw >= 0 {
+				fmt.Println("Setting goal weight to", gw, "kg")
+				goal_weight = gw
+			} else {
+				fmt.Println("Failed to set goal weight.")
+			}
+		}
+		if len(vec) == 3 {
+			tparsed, err := time.Parse("2006-01-02", vec[0])
+			if err != nil {
+				continue
+			}
+			w, err := strconv.ParseFloat(vec[1], 64)
+			if err != nil {
+				continue
+			}
+			cal, err := strconv.ParseFloat(vec[2], 64)
+			if err != nil {
+				continue
+			}
+			if !first_done {
+				first = tparsed
+				first_done = true
+			}
+			t := float64(tparsed.Sub(first).Hours()) / 24.0
+			dates = append(dates, vec[0])
+			times = append(times, t)
+			cals = append(cals, cal)
+			weights = append(weights, w)
 		}
 
-		tparsed, err := time.Parse("2006-01-02", vec[0])
-		if err != nil {
-			continue
-		}
-		w, err := strconv.ParseFloat(vec[1], 64)
-		if err != nil {
-			continue
-		}
-		cal, err := strconv.ParseFloat(vec[2], 64)
-		if err != nil {
-			continue
-		}
-		if !first_done {
-			first = tparsed
-			first_done = true
-		}
-		t := float64(tparsed.Sub(first).Hours()) / 24.0
-		dates = append(dates, vec[0])
-		times = append(times, t)
-		cals = append(cals, cal)
-		weights = append(weights, w)
 	}
 	if len(times) < 3 {
 		fmt.Println("Not enough data to estimate TDEE, fill in atleast 3 days.")
@@ -80,20 +89,27 @@ func main() {
 		for i := range times {
 			fmt.Println(dates[i], math.Round(weights[i]*10)/10, math.Round(cals[i]), "- TDEE =", math.Round(tdee[i]), "- Trend weight:", math.Round(w[i]*100)/100, "- change per week:", math.Round(dwdt[i]*7*100)/100, "")
 		}
+		if !math.IsNaN(goal_weight) {
+			ltdee := tdee[len(tdee)-1]
+			lw := w[len(w)-1]
+			delta := min(max((goal_weight-lw)*7700, -ltdee*0.2), ltdee*0.2)
+			suggested_cals := ltdee + delta
+			fmt.Println(suggested_cals)
+		}
 	}
 }
 
 func TDEE_V2(times []float64, weights []float64, cals []float64) ([]float64, []float64, []float64) {
-	slow_lr := 1 / 90.0
+	slow_lr := 1 / 60.0
 	fast_lr := 1 / 10.5
 	fw := GoldenSectionSearch(func(f float64) float64 {
 		_, _, e := rollLES(times, weights, f)
 		return e
-	}, slow_lr, fast_lr, 1e-6)
+	}, slow_lr, fast_lr, 1e-4)
 	fc := GoldenSectionSearch(func(f float64) float64 {
 		_, _, e := rollLES(times, cals, f)
 		return e
-	}, slow_lr, fast_lr, 1e-6)
+	}, slow_lr, fast_lr, 1e-4)
 
 	w, dwdt, _ := rollLES(times, weights, fw)
 	c, _, _ := rollLES(times, cals, fc)

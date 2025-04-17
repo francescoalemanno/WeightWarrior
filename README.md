@@ -64,9 +64,9 @@ WeightWarrior my_log.txt
 Sample output:
 
 ```txt
-2025-04-10 72.4 2350 - TDEE = 2522 - Trend weight: 72.34 - change per week: 0.12
-2025-04-11 72.6 2400 - TDEE = 2587 - Trend weight: 72.42 - change per week: 0.14
-2025-04-12 72.5 2200 - TDEE = 2451 - Trend weight: 72.39 - change per week: 0.07
+2025-04-10 72.4 2350 - TDEE = 2350 - Trend weight: 72.4  - change per week: 0.00
+2025-04-11 72.6 2400 - TDEE = 2337 - Trend weight: 72.44 - change per week: 0.01 
+2025-04-12 72.5 2200 - TDEE = 2329 - Trend weight: 72.45 - change per week: 0.02 
 ```
 
 ---
