@@ -12,6 +12,9 @@ import (
 	_ "time/tzdata"
 )
 
+const CAL_FAT = 7700.0
+const WUNIT = "kg"
+
 func main() {
 	location, err := time.LoadLocation("UTC")
 	if err != nil {
@@ -78,10 +81,11 @@ func main() {
 		return
 	}
 	if *algorithm == "V1" {
-		tdee, tdee_sd := TDEE_V1(times, weights, cals, 1/7.0)
+		tdee, tdee_sd := TDEE_V1(times, weights, cals, 1/10.5)
 		for i := range times {
 			fmt.Println(dates[i], math.Round(weights[i]*10)/10, math.Round(cals[i]), "- TDEE =", math.Round(tdee[i]), "+/-", math.Round(tdee_sd[i]))
 		}
+		PrintGoalWeight(goal_weight, weights[len(weights)-1], tdee[len(tdee)-1])
 	}
 	if *algorithm == "V2" {
 		w, dwdt, tdee := TDEE_V2(times, weights, cals)
@@ -94,16 +98,16 @@ func main() {
 
 func PrintGoalWeight(goal_weight float64, lw float64, ltdee float64) {
 	if !math.IsNaN(goal_weight) {
-		delta := min(max(min(max(goal_weight-lw, -lw*0.0005), lw*0.0005)*7700.0, -ltdee*0.25), ltdee*0.25)
+		delta := min(max(min(max(goal_weight-lw, -lw*0.0005), lw*0.0005)*CAL_FAT, -ltdee*0.25), ltdee*0.25)
 		suggested_cals := ltdee + delta
-		fmt.Println("To reach goal weight of", goal_weight, "kg, suggested calories:", math.Round(suggested_cals), "cal")
-		fmt.Println("At this rate, you should expect a weekly change of", math.Round((suggested_cals-ltdee)/7700.0*100*7)/100, "kg")
+		fmt.Println("To reach goal weight of", goal_weight, WUNIT+", suggested calories:", math.Round(suggested_cals), "cal")
+		fmt.Println("At this rate, you should expect a weekly change of", math.Round((suggested_cals-ltdee)/CAL_FAT*100*7)/100, WUNIT)
 	}
 }
 
 func TDEE_V2(times []float64, weights []float64, cals []float64) ([]float64, []float64, []float64) {
-	slow_lr := 1 / 60.0
-	fast_lr := 1 / 10.5
+	fast_lr := 1 / 3.0
+	slow_lr := fast_lr / (1 + 90.0*fast_lr)
 	fw := GoldenSectionSearch(func(f float64) float64 {
 		_, _, e := rollLES(times, weights, f)
 		return e
@@ -112,12 +116,11 @@ func TDEE_V2(times []float64, weights []float64, cals []float64) ([]float64, []f
 		_, _, e := rollLES(times, cals, f)
 		return e
 	}, slow_lr, fast_lr, 1e-4)
-
 	w, dwdt, _ := rollLES(times, weights, fw)
 	c, _, _ := rollLES(times, cals, fc)
 	tdee := []float64{}
 	for i := range w {
-		tdee = append(tdee, c[i]-dwdt[i]*7700.0)
+		tdee = append(tdee, c[i]-dwdt[i]*CAL_FAT)
 	}
 	return w, dwdt, tdee
 }
@@ -144,28 +147,24 @@ type LES struct {
 	lr float64
 }
 
+const LES_GAP = 7.0
+
 func NewLES(t, x, dxdt, lr float64) LES {
-	a := 1.0 / lr
-	b := 2.0/lr - 1.0
-	dt := 1.0
-	at := dt * a
-	bt := dt * b
-	ax := dt * dxdt * a
-	bx := dt * dxdt * b
-	return LES{t1: t - at, t2: t - bt, x1: x - ax, x2: x - bx, lr: lr}
+	return LES{t1: t - 1, t2: t - 1 - LES_GAP, x1: x, x2: x - LES_GAP*dxdt, lr: lr}
 }
 func (s *LES) Feed(t, x float64) {
-	s.x1 += s.lr * (x - s.x1)
-	s.x2 += s.lr * (s.x1 - s.x2)
-	s.t1 += s.lr * (t - s.t1)
-	s.t2 += s.lr * (s.t1 - s.t2)
+	flr := s.lr
+	slr := flr / (1.0 + LES_GAP*flr)
+	s.x1 += flr * (x - s.x1)
+	s.x2 += slr * (x - s.x2)
+	s.t1 += flr * (t - s.t1)
+	s.t2 += slr * (t - s.t2)
 }
 func (s *LES) Pred(t float64) float64 {
-	R := s.lr / (1 - s.lr)
-	dx := R * (s.x1 - s.x2)
-	dt := R * (s.t1 - s.t2)
-	dxdt := dx / dt
-	return 2*s.x1 - s.x2 + (t-(2*s.t1-s.t2))*dxdt
+	mx := (s.x1 + s.x2) / 2.0
+	mt := (s.t1 + s.t2) / 2.0
+	dxdt := (s.x1 - s.x2) / (s.t1 - s.t2)
+	return mx + dxdt*(t-mt)
 }
 func rollLES(T []float64, X []float64, lr float64) ([]float64, []float64, float64) {
 	les := NewLES(T[0], X[0], 0.0, lr)
@@ -191,8 +190,8 @@ func TDEE_V1(T []float64, W []float64, Cal []float64, lr float64) ([]float64, []
 	tca := ta * ca
 	tta := ta * ta
 	tdee := ca
-	tdee_var := tdee * tdee * 0.2 * 0.2
-	K := 7700.0 // cal / (kg * day)
+	tdee_var := 0.0 //tdee * tdee * 0.2 * 0.2
+	K := CAL_FAT    // cal / (WUNIT * day)
 	tdee_v := []float64{}
 	tdee_sd := []float64{}
 	for i := range T {
